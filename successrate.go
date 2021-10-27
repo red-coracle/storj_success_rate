@@ -15,40 +15,62 @@ const (
     Reset  = "\033[0m"
 )
 
-func parse_audit(line string) (string) {
+type stat struct {
+    success int
+    warn int
+    critical int
+    rejected int
+    canceled int
+    failed int
+}
+
+type metrics struct {
+    audit stat
+    download stat
+    upload stat
+    repairdownload stat
+    repairupload stat
+    deletes stat
+}
+
+func (s stat) total() int {
+    // Is there a way to iterate struct fields?
+    return s.success + s.warn + s.critical + s.rejected + s.canceled + s.failed
+}
+
+func parse_audit(line string, results *stat) () {
     if strings.Contains(line, "downloaded") {
-        return "success"
+        results.success += 1
     } else if strings.Contains(line, "failed") {
         if !strings.Contains(line, "exist") {
-            return "warn"
+            results.warn += 1
         } else {
-            return "critical"
+            results.critical += 1
         }
     }
-    return "other"
+    return
 }
 
-func parse_store(line string) (string) {
+func parse_store(line string, results *stat) () {
     if strings.Contains(line, "uploaded") || strings.Contains(line, "downloaded") {
-        return "success"
+        results.success += 1
     } else if strings.Contains(line, "rejected") {
-        return "rejected"
+        results.rejected += 1
     } else if strings.Contains(line, "canceled") {
-        return "canceled"
+        results.canceled += 1
     } else if strings.Contains(line, "failed") {
-        return "failed"
+        results.failed += 1
     }
-    return "other"
+    return
 }
 
-func parse_delete(line string) (string) {
+func parse_delete(line string, results *stat) () {
     if strings.Contains(line, "deleted") || strings.Contains(line, "delete piece") {
-        return "success"
+        results.success += 1
     } else if strings.Contains(line, "delete failed") {
-        return "failed"
+        results.failed += 1
     }
-
-    return "other"
+    return
 }
 
 func parse_file(path string) () {
@@ -58,91 +80,73 @@ func parse_file(path string) () {
     }
     defer input.Close()
 
+    var results = metrics{}
     scanner := bufio.NewScanner(input)
-    audit_results := make(map[string]int)
-    download_results := make(map[string]int)
-    upload_results := make(map[string]int)
-    repair_upload_results := make(map[string]int)
-    repair_download_results := make(map[string]int)
-    delete_results := make(map[string]int)
 
     for scanner.Scan() {
         var candidate = scanner.Text()
         if strings.Contains(candidate, "GET_AUDIT") {
-            audit_results[parse_audit(candidate)] += 1
-            audit_results["total"] += 1
+            parse_audit(candidate, &results.audit)
         } else if strings.Contains(candidate, "\"GET\"") {
-            download_results[parse_store(candidate)] += 1
-            download_results["total"] += 1
+            parse_store(candidate, &results.download)
         } else if strings.Contains(candidate, "\"PUT\"") {
-            upload_results[parse_store(candidate)] += 1
-            upload_results["total"] += 1
+            parse_store(candidate, &results.upload)
         } else if strings.Contains(candidate, "GET_REPAIR") {
-            repair_download_results[parse_store(candidate)] += 1
-            repair_download_results["total"] += 1
+            parse_store(candidate, &results.repairdownload)
         } else if strings.Contains(candidate, "PUT_REPAIR") {
-            repair_upload_results[parse_store(candidate)] += 1
-            repair_upload_results["total"] += 1
+            parse_store(candidate, &results.repairupload)
         } else {
-            delete_results[parse_delete(candidate)] += 1
-            delete_results["total"] += 1
+            parse_delete(candidate, &results.deletes)
         }
     }
 
-    audit_results["total"] -= audit_results["other"]
-    download_results["total"] -= download_results["other"]
-    upload_results["total"] -= upload_results["other"]
-    repair_download_results["total"] -= repair_download_results["other"]
-    repair_upload_results["total"] -= repair_upload_results["other"]
-    delete_results["total"] -= delete_results["other"]
-
     fmt.Printf("%s========== AUDIT ==============%s\n", Cyan, Reset)
-    fmt.Printf("%sCritically failed:     %d%s\n", Red, audit_results["critical"], Reset)
-    fmt.Printf("Critical Fail Rate:    %.3f%%\n", 100.0 * float64(audit_results["critical"]) / float64(audit_results["total"]))
-    fmt.Printf("%sRecoverable failed:    %d%s\n", Yellow, audit_results["warn"], Reset)
-    fmt.Printf("Recoverable Fail Rate: %.3f%%\n", 100.0 * float64(audit_results["warn"]) / float64(audit_results["total"]))
-    fmt.Printf("%sSuccessful:            %d%s\n", Green, audit_results["success"], Reset)
-    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(audit_results["success"]) / float64(audit_results["total"]))
+    fmt.Printf("%sCritically failed:     %d%s\n", Red, results.audit.critical, Reset)
+    fmt.Printf("Critical Fail Rate:    %.3f%%\n", 100.0 * float64(results.audit.critical) / float64(results.audit.total()))
+    fmt.Printf("%sRecoverable failed:    %d%s\n", Yellow, results.audit.warn, Reset)
+    fmt.Printf("Recoverable Fail Rate: %.3f%%\n", 100.0 * float64(results.audit.warn) / float64(results.audit.total()))
+    fmt.Printf("%sSuccessful:            %d%s\n", Green, results.audit.success, Reset)
+    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(results.audit.success) / float64(results.audit.total()))
 
     fmt.Printf("%s========== DOWNLOAD ===========%s\n", Cyan, Reset)
-    fmt.Printf("%sFailed:                %d%s\n", Red, download_results["failed"], Reset)
-    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(download_results["failed"]) / float64(download_results["total"]))
-    fmt.Printf("%sCanceled:              %d%s\n", Yellow, download_results["canceled"], Reset)
-    fmt.Printf("Cancel Rate:           %.3f%%\n", 100.0 * float64(download_results["canceled"]) / float64(download_results["total"]))
-    fmt.Printf("%sSuccessful:            %d%s\n", Green, download_results["success"], Reset)
-    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(download_results["success"]) / float64(download_results["total"]))
+    fmt.Printf("%sFailed:                %d%s\n", Red, results.download.failed, Reset)
+    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(results.download.failed) / float64(results.download.total()))
+    fmt.Printf("%sCanceled:              %d%s\n", Yellow, results.download.canceled, Reset)
+    fmt.Printf("Cancel Rate:           %.3f%%\n", 100.0 * float64(results.download.canceled) / float64(results.download.total()))
+    fmt.Printf("%sSuccessful:            %d%s\n", Green, results.download.success, Reset)
+    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(results.download.success) / float64(results.download.total()))
 
     fmt.Printf("%s========== UPLOAD =============%s\n", Cyan, Reset)
-    fmt.Printf("%sRejected:              %d%s\n", Yellow, upload_results["rejected"], Reset)
-    fmt.Printf("Acceptance Rate:       %.3f%%\n", 100.0 - 100.0 * float64(upload_results["rejected"]) / float64(upload_results["total"]))
-    fmt.Printf("%sFailed:                %d%s\n", Red, upload_results["failed"], Reset)
-    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(upload_results["failed"]) / float64(upload_results["total"]))
-    fmt.Printf("%sCanceled:              %d%s\n", Yellow, upload_results["canceled"], Reset)
-    fmt.Printf("Cancel Rate:           %.3f%%\n", 100.0 * float64(upload_results["canceled"]) / float64(upload_results["total"]))
-    fmt.Printf("%sSuccessful:            %d%s\n", Green, upload_results["success"], Reset)
-    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(upload_results["success"]) / float64(upload_results["total"]))
+    fmt.Printf("%sRejected:              %d%s\n", Yellow, results.upload.rejected, Reset)
+    fmt.Printf("Acceptance Rate:       %.3f%%\n", 100.0 - 100.0 * float64(results.upload.rejected) / float64(results.upload.total()))
+    fmt.Printf("%sFailed:                %d%s\n", Red, results.upload.failed, Reset)
+    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(results.upload.failed) / float64(results.upload.total()))
+    fmt.Printf("%sCanceled:              %d%s\n", Yellow, results.upload.canceled, Reset)
+    fmt.Printf("Cancel Rate:           %.3f%%\n", 100.0 * float64(results.upload.canceled) / float64(results.upload.total()))
+    fmt.Printf("%sSuccessful:            %d%s\n", Green, results.upload.success, Reset)
+    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(results.upload.success) / float64(results.upload.total()))
 
     fmt.Printf("%s========== REPAIR DOWNLOAD ====%s\n", Cyan, Reset)
-    fmt.Printf("%sFailed:                %d%s\n", Red, repair_download_results["failed"], Reset)
-    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(repair_download_results["failed"]) / float64(repair_download_results["total"]))
-    fmt.Printf("%sCanceled:              %d%s\n", Yellow, repair_download_results["canceled"], Reset)
-    fmt.Printf("Cancel Rate:           %.3f%%\n", 100.0 * float64(repair_download_results["canceled"]) / float64(repair_download_results["total"]))
-    fmt.Printf("%sSuccessful:            %d%s\n", Green, repair_download_results["success"], Reset)
-    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(repair_download_results["success"]) / float64(repair_download_results["total"]))
+    fmt.Printf("%sFailed:                %d%s\n", Red, results.repairdownload.failed, Reset)
+    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(results.repairdownload.failed) / float64(results.repairdownload.total()))
+    fmt.Printf("%sCanceled:              %d%s\n", Yellow, results.repairdownload.canceled, Reset)
+    fmt.Printf("Cancel Rate:           %.3f%%\n", 100.0 * float64(results.repairdownload.canceled) / float64(results.repairdownload.total()))
+    fmt.Printf("%sSuccessful:            %d%s\n", Green, results.repairdownload.success, Reset)
+    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(results.repairdownload.success) / float64(results.repairdownload.total()))
 
     fmt.Printf("%s========== REPAIR UPLOAD ======%s\n", Cyan, Reset)
-    fmt.Printf("%sFailed:                %d%s\n", Red, repair_upload_results["failed"], Reset)
-    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(repair_upload_results["failed"]) / float64(repair_upload_results["total"]))
-    fmt.Printf("%sCanceled:              %d%s\n", Yellow, repair_upload_results["canceled"], Reset)
-    fmt.Printf("Cancel Rate:           %.3f%%\n", 100.0 * float64(repair_upload_results["canceled"]) / float64(repair_upload_results["total"]))
-    fmt.Printf("%sSuccessful:            %d%s\n", Green, repair_upload_results["success"], Reset)
-    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(repair_upload_results["success"]) / float64(repair_upload_results["total"]))
+    fmt.Printf("%sFailed:                %d%s\n", Red, results.repairupload.failed, Reset)
+    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(results.repairupload.failed) / float64(results.repairupload.total()))
+    fmt.Printf("%sCanceled:              %d%s\n", Yellow, results.repairupload.canceled, Reset)
+    fmt.Printf("Cancel Rate:           %.3f%%\n", 100.0 * float64(results.repairupload.canceled) / float64(results.repairupload.total()))
+    fmt.Printf("%sSuccessful:            %d%s\n", Green, results.repairupload.success, Reset)
+    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(results.repairupload.success) / float64(results.repairupload.total()))
 
     fmt.Printf("%s========== DELETE =============%s\n", Cyan, Reset)
-    fmt.Printf("%sFailed:                %d%s\n", Red, delete_results["failed"], Reset)
-    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(delete_results["failed"]) / float64(delete_results["total"]))
-    fmt.Printf("%sSuccessful:            %d%s\n", Green, delete_results["success"], Reset)
-    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(delete_results["success"]) / float64(delete_results["total"]))
+    fmt.Printf("%sFailed:                %d%s\n", Red, results.deletes.failed, Reset)
+    fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(results.deletes.failed) / float64(results.deletes.total()))
+    fmt.Printf("%sSuccessful:            %d%s\n", Green, results.deletes.success, Reset)
+    fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(results.deletes.success) / float64(results.deletes.total()))
 }
 
 func main() {

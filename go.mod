@@ -1,3 +1,3 @@
-module github.com/red-coracle/successrate
+module github.com/red-coracle/storj_success_rate
 
 go 1.17
