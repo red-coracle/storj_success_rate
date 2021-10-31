@@ -2,6 +2,8 @@
 
 A simple Go implementation of the [Storj success rate tool](https://github.com/ReneSmeekes/storj_success_rate) by ReneSmeekes.
 
+On average, a speedup of ~7x was observed e.g. parsing a log file of 1.1 GiB went from 22 seconds down to 3.
+
 ## Install
 
 Either build from source or [download from releases](https://github.com/red-coracle/storj_success_rate/releases)
