@@ -73,14 +73,13 @@ func parse_delete(line string, results *stat) () {
     return
 }
 
-func parse_file(path string) () {
+func parse_file(path string, results *metrics) () {
     input, err := os.Open(path)
     if err != nil {
         return
     }
     defer input.Close()
 
-    var results = metrics{}
     scanner := bufio.NewScanner(input)
 
     for scanner.Scan() {
@@ -99,7 +98,9 @@ func parse_file(path string) () {
             parse_delete(candidate, &results.deletes)
         }
     }
+}
 
+func print_stats(results metrics) () {
     fmt.Printf("%s========== AUDIT ==============%s\n", Cyan, Reset)
     fmt.Printf("%sCritically failed:     %d%s\n", Red, results.audit.critical, Reset)
     fmt.Printf("Critical Fail Rate:    %.3f%%\n", 100.0 * float64(results.audit.critical) / float64(results.audit.total()))
@@ -147,12 +148,17 @@ func parse_file(path string) () {
     fmt.Printf("Fail Rate:             %.3f%%\n", 100.0 * float64(results.deletes.failed) / float64(results.deletes.total()))
     fmt.Printf("%sSuccessful:            %d%s\n", Green, results.deletes.success, Reset)
     fmt.Printf("Success Rate:          %.3f%%\n", 100.0 * float64(results.deletes.success) / float64(results.deletes.total()))
+    return
 }
 
 func main() {
     if len(os.Args) < 2 {
-        fmt.Printf("Usage: %s <path to log file>\n", os.Args[0])
+        fmt.Printf("Usage: %s <path to log file(s)>\n", os.Args[0])
     } else {
-        parse_file(os.Args[1])
+        var results = metrics{}
+        for _, path := range os.Args[1:] {
+            parse_file(path, &results)
+        }
+        print_stats(results)
     }
 }

@@ -20,3 +20,5 @@ GOOS=darwin GOARCH=amd64 go build -o bin/successrate-amd64-darwin .
 ## Usage
 
 `./successrate /path/to/log/file.log`
+
+Multiple paths may be specified to get combined results.
