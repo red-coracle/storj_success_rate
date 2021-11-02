@@ -73,13 +73,8 @@ func parse_delete(line string, results *stat) () {
     return
 }
 
-func parse_file(path string, results *metrics) () {
-    input, err := os.Open(path)
-    if err != nil {
-        return
-    }
+func parse_file(input *os.File, results *metrics) () {
     defer input.Close()
-
     scanner := bufio.NewScanner(input)
 
     for scanner.Scan() {
@@ -152,13 +147,18 @@ func print_stats(results metrics) () {
 }
 
 func main() {
-    if len(os.Args) < 2 {
-        fmt.Printf("Usage: %s <path to log file(s)>\n", os.Args[0])
-    } else {
-        var results = metrics{}
+    var results = metrics{}
+
+    if len(os.Args) == 1 {
+        parse_file(os.Stdin, &results)
+    } else if len(os.Args) > 1 {
         for _, path := range os.Args[1:] {
-            parse_file(path, &results)
+            input, _ := os.Open(path)
+            parse_file(input, &results)
         }
+    }
+
+    if results.download.total() > 0 {
         print_stats(results)
     }
 }
