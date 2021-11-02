@@ -27,7 +27,7 @@ Multiple paths may be specified to get combined results.
 
 You can also read input from stdin, e.g. preprocessing with grep
 ```bash
-grep '2021-10' file.log | go run .
+grep '2021-10' file.log | ./successrate
 ```
 or exporting docker logs
 ```bash
